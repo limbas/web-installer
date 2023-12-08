@@ -147,6 +147,9 @@ class Setup
      */
     private static function dirIsEmpty(string $directory): bool
     {
+        if(!is_dir($directory)) {
+            return true;
+        }
         $self = basename(__FILE__);
         $handle = opendir($directory);
         if ($handle) {
@@ -260,7 +263,8 @@ class Setup
                 'Continue to the installation' => 'Weiter zur Installation',
                 'Make sure your domain points to the following directory:' => 'Stellen Sie sicher, dass Ihre Domain auf das nachfolgende Verzeichnis zeigt:',
                 'Please enter a directory.' => 'Bitte Verzeichnis eintragen.',
-                'The URL of the latest version could not be retrieved from GitHub.' => 'Die URL der neuesten Version konnte nicht von GitHub abgerufen werden.'
+                'The URL of the latest version could not be retrieved from GitHub.' => 'Die URL der neuesten Version konnte nicht von GitHub abgerufen werden.',
+                'If a 404 / Not found error occurs, the # in front of the "RewriteBase" entry in the following file may need to be removed. If the domain does not point directly to public, the corresponding path must be entered after "RewriteBase".' => 'Falls ein Fehler 404 / Nicht gefunden auftritt oder die Seite leer bleibt, muss ggf. in der nachfolgenden Datei das # vor dem der Eintrag "RewriteBase" entfernt werden. Falls die Domain nicht auf public direkt zeigt, muss hinter "RewriteBase" der entsprechende Pfad angegeben werden.'
             ],
 
 
@@ -551,7 +555,12 @@ if ($step === 1) {
 
                 <div class="alert alert-warning mb-3">
                     <?= Setup::lang('Make sure your domain points to the following directory:') ?>
-                    <br><?= __DIR__ . DIRECTORY_SEPARATOR . trim('.', DIR) ?>public
+                    <br><?= __DIR__ . DIRECTORY_SEPARATOR . trim(DIR, './') . DIRECTORY_SEPARATOR ?>public
+                </div>
+            
+                <div class="alert alert-warning mb-3">
+                    <?= Setup::lang('If a 404 / Not found error occurs or the page remains empty, the # in front of the "RewriteBase" entry in the following file may need to be removed. If the domain does not point directly to public, the corresponding path must be entered after "RewriteBase".') ?>
+                    <br><?= __DIR__ . DIRECTORY_SEPARATOR . trim(DIR, './') . DIRECTORY_SEPARATOR ?>public/.htaccess
                 </div>
 
                 <div class="text-center">
