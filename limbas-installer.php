@@ -10,7 +10,7 @@ class Setup
 
     /**
      * Sets the language based on browser language
-     * 
+     *
      * @return void
      */
     public static function loadLanguage(): void
@@ -114,8 +114,13 @@ class Setup
         // download the latest release
         if (!file_exists($fileName)) {
             $url = self::getLatestVersionUrl();
-            if($url === false) {
+            if ($url === false) {
                 return self::lang('The URL of the latest version could not be retrieved from GitHub.');
+            } elseif (is_array($url)) {
+                return self::lang('The URL of the latest version could not be retrieved from GitHub.') . '<br>' .
+                    self::lang('GitHub returned the following message:') . ' ' . $url['message'] . '<br>' .
+                    self::lang('Try again later or download and extract (after upload) the latest version manually:') . '<br>' .
+                    '<a href="https://github.com/limbas/limbas/releases" target="_blank">https://github.com/limbas/limbas/releases</a>';
             }
             $downloadStatus = self::downloadFile($url, $fileName);
             if ($downloadStatus !== true) {
@@ -147,14 +152,13 @@ class Setup
      */
     private static function dirIsEmpty(string $directory): bool
     {
-        if(!is_dir($directory)) {
+        if (!is_dir($directory)) {
             return true;
         }
         $self = basename(__FILE__);
         $handle = opendir($directory);
         if ($handle) {
             while (false !== ($entry = readdir($handle))) {
-                echo $entry . '<br>';
                 if ($entry !== '.' && $entry !== '..' && $entry !== $self) {
                     closedir($handle);
                     return false;
@@ -168,12 +172,52 @@ class Setup
 
     /**
      * Gets the download URL of the latest version from GitHub
-     * 
+     *
+     * @return bool|string|array
+     */
+    private static function getLatestVersionUrl(): bool|string|array
+    {
+        try {
+            $content = self::curlGetContent('https://api.github.com/repos/limbas/limbas/releases/latest');
+            $githubData = json_decode($content, true);
+
+            if (array_key_exists('message', $githubData)) {
+                return ['message' => $githubData['message']];
+            } elseif (array_key_exists('assets', $githubData)) {
+                $url = $githubData['assets'][0]['browser_download_url'];
+            }
+
+        } catch (Throwable) {
+            return false;
+        }
+        if (empty($url)) {
+            return false;
+        }
+        return $url;
+    }
+
+
+    /**
+     * Get content from url
+     * @param string $url
      * @return bool|string
      */
-    private static function getLatestVersionUrl(): bool|string {
-        try {
+    private static function curlGetContent(string $url): bool|string
+    {
+        $ch = curl_init();
 
+        if ($ch === false) {
+            return false;
+        }
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'PHP limbas/web-installer');
+        $data = curl_exec($ch);
+        curl_close($ch);
+
+        if ($data === false) {
+            // fallback, try file_get_contents
             $options = [
                 'http' => [
                     'method' => 'GET',
@@ -184,17 +228,13 @@ class Setup
             ];
 
             $context = stream_context_create($options);
-            $githubData = json_decode(file_get_contents('https://api.github.com/repos/limbas/limbas/releases/latest', false,$context), true);
-            $url = $githubData['assets'][0]['browser_download_url'];
-        } catch (Throwable) {
-            return false;
+            $data = file_get_contents('https://api.github.com/repos/limbas/limbas/releases/latest', false, $context);
         }
-        if(empty($url)) {
-            return false;
-        }
-        return $url;
+
+        return $data;
     }
-    
+
+
     /**
      * Downloads a file and stores it in the local filesystem
      *
@@ -235,7 +275,7 @@ class Setup
 
     /**
      * Translates given string
-     * 
+     *
      * @param string $value
      * @return string
      */
@@ -264,7 +304,9 @@ class Setup
                 'Make sure your domain points to the following directory:' => 'Stellen Sie sicher, dass Ihre Domain auf das nachfolgende Verzeichnis zeigt:',
                 'Please enter a directory.' => 'Bitte Verzeichnis eintragen.',
                 'The URL of the latest version could not be retrieved from GitHub.' => 'Die URL der neuesten Version konnte nicht von GitHub abgerufen werden.',
-                'If a 404 / Not found error occurs, the # in front of the "RewriteBase" entry in the following file may need to be removed. If the domain does not point directly to public, the corresponding path must be entered after "RewriteBase".' => 'Falls ein Fehler 404 / Nicht gefunden auftritt oder die Seite leer bleibt, muss ggf. in der nachfolgenden Datei das # vor dem der Eintrag "RewriteBase" entfernt werden. Falls die Domain nicht auf public direkt zeigt, muss hinter "RewriteBase" der entsprechende Pfad angegeben werden.'
+                'If a 404 / Not found error occurs, the # in front of the "RewriteBase" entry in the following file may need to be removed. If the domain does not point directly to public, the corresponding path must be entered after "RewriteBase".' => 'Falls ein Fehler 404 / Nicht gefunden auftritt oder die Seite leer bleibt, muss ggf. in der nachfolgenden Datei das # vor dem der Eintrag "RewriteBase" entfernt werden. Falls die Domain nicht auf public direkt zeigt, muss hinter "RewriteBase" der entsprechende Pfad angegeben werden.',
+                'GitHub returned the following message:' => 'GitHub gab folgende Meldung zurück',
+                'Try again later or download and extract (after upload) the latest version manually:' => 'Versuche es später noch einmal oder lade manuell die neueste Version herunter und extrahiere sie (nach dem Hochladen):'
             ],
 
 
@@ -555,12 +597,14 @@ if ($step === 1) {
 
                 <div class="alert alert-warning mb-3">
                     <?= Setup::lang('Make sure your domain points to the following directory:') ?>
-                    <br><?= __DIR__ . DIRECTORY_SEPARATOR . trim(DIR, './') . DIRECTORY_SEPARATOR ?>public
+                    <br><?= __DIR__ . DIRECTORY_SEPARATOR . trim(DIR, './') . (empty(DIR) ? '' : DIRECTORY_SEPARATOR) ?>
+                    public
                 </div>
-            
+
                 <div class="alert alert-warning mb-3">
                     <?= Setup::lang('If a 404 / Not found error occurs or the page remains empty, the # in front of the "RewriteBase" entry in the following file may need to be removed. If the domain does not point directly to public, the corresponding path must be entered after "RewriteBase".') ?>
-                    <br><?= __DIR__ . DIRECTORY_SEPARATOR . trim(DIR, './') . DIRECTORY_SEPARATOR ?>public/.htaccess
+                    <br><?= __DIR__ . DIRECTORY_SEPARATOR . trim(DIR, './') . (empty(DIR) ? '' : DIRECTORY_SEPARATOR) ?>
+                    public/.htaccess
                 </div>
 
                 <div class="text-center">
